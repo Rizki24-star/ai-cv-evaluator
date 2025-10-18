@@ -1,0 +1,65 @@
+version: "3.8"
+
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src
+      - ./upload:/app/upload
+      - ./.env:/app/.env
+    depends_on:
+      - qdrant
+      - redis
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    networks:
+      - app-network
+
+  qdrant:
+    image: qdrant/qdrant:v1.7.4
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - app-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - app-network
+
+  celery_worker:
+    build: .
+    command: celery -A src.main worker --loglevel=info
+    volumes:
+      - ./src:/app/src
+      - ./upload:/app/upload
+      - ./.env:/app/.env
+    depends_on:
+      - redis
+      - qdrant
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    networks:
+      - app-network
+
+volumes:
+  qdrant_data:
+  redis_data:
+
+networks:
+  app-network:
+    driver: bridge

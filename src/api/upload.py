@@ -16,7 +16,7 @@ async def upload_document(
     document_type: DocumentType = Form(...)
 ):
     """
-        Upload CV or Project Report
+    Upload CV or Project Report
     """
     try:
         if not file.filename.endswith(".pdf"):
@@ -74,3 +74,11 @@ async def upload_document(
             status_code= 500,
             detail=f"Upload file failed: {str(e)}"
         )
+
+async def validate_document_exists(doc_id: str, doc_type: DocumentType) -> bool:
+    """
+    Check if document exists
+    """
+    filename = f"{doc_type.value}_{doc_id}.pdf"
+    file_path = settings.upload_dir / filename
+    return file_path.exists()

@@ -8,7 +8,7 @@ from config import get_settings
 from services.qdrant_service import get_qdrant_service
 from services.gemini_service import get_gemini_service
 from services.pdf_service import get_pdf_parser
-from models import ChunkMetadata
+from models.qdrant import ChunkMetadata
 import logging
 
 settings = get_settings()

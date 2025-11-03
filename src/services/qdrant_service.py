@@ -1,4 +1,4 @@
-from config import get_settings
+from src.config import get_settings
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Distance,
@@ -11,7 +11,9 @@ from qdrant_client.models import (
 from typing import List, Dict, Optional
 import uuid
 import logging
-from models.qdrant import RAGContext, ChunkMetadata
+from src.models.qdrant import RAGContext, ChunkMetadata
+from sqlalchemy.orm import Session
+from src.repository import category_repository
 
 settings = get_settings()
 
@@ -25,15 +27,13 @@ class QdrantService:
         self.embedding_dimension = settings.qdrant_embedding_dimension
         logging.info(f"Connected to Qdrant at {self.url}")
 
-    def create_collections(self) -> None:
-        """Create collection if they dont exist"""
+    def create_collections(self, db: Session) -> None:
+        """Create collections from DB categories if they don't exist"""
+        categories = category_repository.find_all(db)
+        collection_names = {getattr(category, "collection_name", None) for category in categories}
+        collection_names = {name for name in collection_names if name}
 
-        collection = [
-            settings.qdrant_cv_collection,
-            settings.qdrant_project_collection
-        ]
-
-        for collection_name in collection:
+        for collection_name in collection_names:
             if not self.client.collection_exists(collection_name):
                 self.client.create_collection(
                     collection_name=collection_name,

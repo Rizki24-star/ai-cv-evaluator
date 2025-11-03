@@ -1,11 +1,20 @@
+import logging
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.params import Depends
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
-from config import get_settings
-from api import upload, evaluate
-from custom_logging import configure_logging, LogLevels
-from utils.response import create_response
+from sqlalchemy.orm import Session
+from sqlalchemy.sql.annotation import Annotated
+
+from src.config import get_settings
+from src.api import upload, evaluate
+from src.custom_logging import configure_logging, LogLevels
+from src.databases.postgres.database import sessionLocal
+from src.utils.response import create_response
+import src.databases.postgres.model as models
+from src.databases.postgres.database import engine
 
 settings = get_settings()
 configure_logging(LogLevels.debug)
@@ -20,6 +29,9 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
+# Generate all table
+models.Base.metadata.create_all(bind=engine)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -27,6 +39,22 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"]
 )
+
+@app.on_event("startup")
+def on_startup() -> None:
+    """Initialize Qdrant collections from DB categories when app starts."""
+    from src.services.qdrant_service import get_qdrant_service
+
+    logging.info("App startup: ensuring Qdrant collections exist")
+    db: Session = sessionLocal()
+    try:
+        qdrant = get_qdrant_service()
+        qdrant.create_collections(db=db)
+    except Exception as e:
+        logging.error(f"Failed to create Qdrant collections on startup: {e}")
+        raise
+    finally:
+        db.close()
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request, exc):
@@ -45,8 +73,6 @@ async def http_exception_handler(request, exc):
 app.include_router(upload.router, tags=["Upload"], prefix="/api/v1")
 app.include_router(evaluate.router, tags=["Evaluate"], prefix="/api/v1")
 
-
-
 @app.get("/")
 async def root():
     return {"message": "AI CV Screening Server running..."}
@@ -54,14 +80,8 @@ async def root():
 @app.get("/health", tags=["Health"])
 async def health_check():
     """Health Check Endpoint"""
-
-    from services.qdrant_service import get_qdrant_service
-
     try:
-        qdrant  = get_qdrant_service()
-        cv_info = qdrant.get_collection_info(settings.qdrant_cv_collection)
-        project_info = qdrant.get_collection_info(settings.qdrant_project_collection)
-
+        # qdrant  = get_qdrant_service()
         return {
             "status": "healthy",
             "services": {
@@ -69,10 +89,6 @@ async def health_check():
                 "qdrant": "up",
                 "redis": "up"
             },
-            "collections": {
-                "cv_evaluation": cv_info,        # ← Shows collection stats
-                "project_evaluation": project_info
-            }
         }
     except HTTPException as e:
         return {

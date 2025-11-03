@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     qdrant_url: str = "http://localhost:6333"
     qdrant_cv_collection: str = "cv_evaluation_context"
     qdrant_project_collection: str = "project_evaluation_context"
+    qdrant_job_desc_collection: str = "job_description_context"
+    qdrant_company_collection: str = "job_company_context"
     qdrant_embedding_dimension: int = 768
 
     # Redis Setting

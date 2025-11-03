@@ -1,4 +1,4 @@
-from models import APIResponse
+from src.models import APIResponse
 
 def create_response(success: bool, message: str, data=None, error=None):
     response = {"success": success, "message": message}

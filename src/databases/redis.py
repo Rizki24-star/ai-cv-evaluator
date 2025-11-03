@@ -1,12 +1,28 @@
 from redis import asyncio as redis
 import json
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
-from config import get_settings
-from models.job import JobStatus
+from src.config import get_settings
+from src.models.job import JobStatus
 import logging
 
 settings = get_settings()
+
+# Utility: recursively remove keys with None values from dicts/lists
+# Keeps stored job payloads clean and avoids leaking null legacy fields
+
+def _strip_none(obj):
+    if isinstance(obj, dict):
+        clean = {}
+        for k, v in obj.items():
+            if v is None:
+                continue
+            vv = _strip_none(v)
+            clean[k] = vv
+        return clean
+    if isinstance(obj, list):
+        return [_strip_none(v) for v in obj if v is not None]
+    return obj
 
 async def get_redis_client() -> redis.Redis:
     """
@@ -19,7 +35,9 @@ async def get_redis_client() -> redis.Redis:
 async def create_job_record(
         job_id: str,
         cv_id: str,
+        cv_context: List[int],
         report_id: str,
+        project_context: List[int],
         job_title: str,
         status: str,
         created_at: datetime
@@ -33,7 +51,9 @@ async def create_job_record(
     job_data = {
         "id": job_id,
         "cv_id": cv_id,
+        "cv_context": cv_context,
         "report_id": report_id,
+        "project_context": project_context,
         "job_title": job_title,
         "status": status.value,
         "created_at": created_at.isoformat() + "Z",
@@ -57,7 +77,9 @@ async def get_job_status(job_id: str) -> Optional[Dict[str, Any]]:
     if not job_data_str:
         return None
 
-    return json.loads(job_data_str)
+    data = json.loads(job_data_str)
+    # Strip None values on read to avoid leaking null legacy fields
+    return _strip_none(data)
 
 async def update_job_status(
         job_id: str,

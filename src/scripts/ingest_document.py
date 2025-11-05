@@ -4,11 +4,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.config import get_settings
-from src.services.qdrant_service import get_qdrant_service
-from src.services.gemini_service import get_gemini_service
-from src.services.pdf_service import get_pdf_parser
-from src.models.qdrant import ChunkMetadata
+from config import get_settings
+from services.qdrant_service import get_qdrant_service
+from services.gemini_service import get_gemini_service
+from services.pdf_service import get_pdf_parser
+from models.qdrant import ChunkMetadata
 import logging
 
 settings = get_settings()

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
-from config import get_settings
-from models.upload import DocumentType, UploadRequest, UploadResponse
-from utils.response import create_response
+from src.config import get_settings
+from src.models.upload import DocumentType, UploadRequest, UploadResponse
+from src.utils.response import create_response
 import uuid
 import aiofiles
 from datetime import datetime

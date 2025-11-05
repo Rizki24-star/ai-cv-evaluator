@@ -17,6 +17,7 @@ def validate_and_repair_json(
 
     try:
         data = json.loads(json_str)
+        data = normalize_json_fields(data)
         data = validate_score_range(data)
         validated = expected_model(**data)
         return validated.model_dump()
@@ -31,6 +32,7 @@ def validate_and_repair_json(
 
     try:
         data = json.loads(cleaned)
+        data = normalize_json_fields(data)
         data = validate_score_range(data)
         validated = expected_model(**data)
         logger.info("JSON repaired successfully after cleaning")
@@ -41,6 +43,7 @@ def validate_and_repair_json(
     # Extract with regex as last resort
     try:
         extracted = extract_json_with_regex(json_str, expected_model)
+        extracted = normalize_json_fields(extracted)
         extracted = validate_score_range(extracted)
         validated = expected_model(**extracted)
         logger.info("JSON extracted with regex successfully")
@@ -53,6 +56,7 @@ def validate_and_repair_json(
     try:
         partial_data = extract_json_with_regex(json_str, expected_model)
         complete_data = fill_missing_fields(partial_data, expected_model)
+        complete_data = normalize_json_fields(complete_data)
         complete_data = validate_score_range(complete_data)
         validated = expected_model(**complete_data)
         logger.info("JSON completed with defaults")
@@ -192,6 +196,72 @@ def get_default_value(field_name: str, field_info: Any) -> Any:
 
     # Default to None for unknown types
     return None
+
+
+def normalize_json_fields(data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Normalize common LLM JSON deviations:
+    - Convert numeric-like strings to numbers for known score fields and nested 'scores'
+    - Ensure 'reasoning' is a dict (wrap string/list into {'summary': ...})
+    - Trim text fields for cleanliness
+    """
+    if not isinstance(data, dict):
+        return data
+
+    # Coerce numeric-like strings for known fields
+    score_fields = {
+        'technical_skills', 'experience_level', 'achievements', 'cultural_fit',
+        'correctness', 'code_quality', 'resilience', 'documentation', 'creativity'
+    }
+
+    def coerce_num(val):
+        if isinstance(val, (int, float)):
+            return val
+        if isinstance(val, str):
+            s = val.strip()
+            # Extract leading number if present
+            m = re.match(r"^(-?\d+(?:\.\d+)?)", s)
+            if not m:
+                # Fallback: find any number in the string (prefer 1-5)
+                m = re.search(r"(?<!\d)([1-5])(?!\d)", s) or re.search(r"(-?\d+(?:\.\d+)?)", s)
+            if m:
+                num_str = m.group(1)
+                try:
+                    if "." in num_str:
+                        return float(num_str)
+                    return int(num_str)
+                except Exception:
+                    return val
+        return val
+
+    for k in list(data.keys()):
+        v = data[k]
+        if k in score_fields:
+            data[k] = coerce_num(v)
+        elif k == 'scores' and isinstance(v, dict):
+            for sk, sv in list(v.items()):
+                if sk in score_fields:
+                    v[sk] = coerce_num(sv)
+        elif isinstance(v, str):
+            data[k] = v.strip()
+
+    # Normalize reasoning to a dict
+    if 'reasoning' in data:
+        rv = data['reasoning']
+        if isinstance(rv, str) and rv.strip():
+            data['reasoning'] = {'summary': rv.strip()}
+        elif isinstance(rv, list):
+            # Join list into a summary and map index to items
+            summary = "; ".join([str(x).strip() for x in rv if str(x).strip()])
+            detailed = {f"item_{i+1}": str(x).strip() for i, x in enumerate(rv)}
+            data['reasoning'] = {'summary': summary, 'details': detailed}
+        elif rv is None:
+            data['reasoning'] = {}
+    else:
+        # If model expects reasoning but it's missing, leave it absent; fill_missing_fields may add default
+        pass
+
+    return data
 
 
 def validate_score_range(data: Dict[str, Any]) -> Dict[str, Any]:

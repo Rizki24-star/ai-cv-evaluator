@@ -1,10 +1,12 @@
+from typing import List
+
 from celery import Celery, Task
 from celery.exceptions import SoftTimeLimitExceeded
-from config import get_settings
-from models.job import JobStatus
-from databases.redis import update_job_status
-from services.evaluation_pipeline_service import get_evaluation_pipeline
-from custom_logging import LOG_FORMAT_DEBUG
+from src.config import get_settings
+from src.models.job import JobStatus
+from src.databases.redis import update_job_status
+from src.services.evaluation_pipeline_service import get_evaluation_pipeline
+from src.custom_logging import LOG_FORMAT_DEBUG
 import logging
 import asyncio
 
@@ -33,12 +35,14 @@ celery_app.conf.update(
     worker_task_log_format=LOG_FORMAT_DEBUG
 )
 
-@celery_app.task(bind=True, max_retries=3)
+@celery_app.task(bind=True, max_retries=3, name='src.task.run_evaluation_pipeline')
 def run_evaluation_pipeline(
     self: Task,
     job_id: str,
     cv_id: str,
+    cv_context: List[int],
     report_id: str,
+    project_context: List[int],
     job_title: str
 ):
     async def _run_task():
@@ -49,7 +53,9 @@ def run_evaluation_pipeline(
             pipeline = get_evaluation_pipeline()
             result = await pipeline.evaluate(
                 cv_id=cv_id,
+                cv_context=cv_context,
                 report_id=report_id,
+                project_context=project_context,
                 job_title=job_title
             )
 

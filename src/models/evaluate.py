@@ -1,11 +1,13 @@
 from pydantic import BaseModel, Field, field_validator
-from models.job import JobStatus
-from typing import Optional
+from src.models.job import JobStatus
+from typing import Optional, List
 
 class EvaluateRequest(BaseModel):
     """Evaluation Request"""
     cv_id: str = Field(...)
+    cv_context: List[int] = Field(...)
     report_id: str = Field(...)
+    project_context: List[int] = Field(...)
     job_title: str = Field(...)
 
     @field_validator('job_title')
@@ -101,6 +103,9 @@ class EvaluationResultResponse(BaseModel):
 
     # Final Summary
     overall_summary: Optional[str] = None
+
+    # Formatted result following mandatory ReferenceDocument.response_format
+    formatted_result: Optional[dict] = None
 
     # Metadata
     job_title: Optional[str] = None

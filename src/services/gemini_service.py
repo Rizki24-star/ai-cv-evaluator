@@ -2,8 +2,8 @@ import google.generativeai as genai
 import json
 import logging
 from typing import Dict, Any, Optional
-from config import get_settings
-from utils.validator import validate_and_repair_json
+from src.config import get_settings
+from src.utils.validator import validate_and_repair_json, clean_json_string
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -94,6 +94,13 @@ class GeminiServices:
 
             text = response.text
             logging.info(f"Gemini generated {len(text)} characters")
+
+            # If JSON mode, sanitize common LLM artifacts like code fences before returning
+            if json_mode and isinstance(text, str):
+                cleaned = clean_json_string(text)
+                if cleaned != text:
+                    logging.warning("Sanitized LLM output by removing code fences/formatting artifacts for JSON parsing")
+                text = cleaned
 
             return text
 

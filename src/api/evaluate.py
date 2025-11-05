@@ -1,14 +1,17 @@
-from fastapi import APIRouter, HTTPException, Path
-from task import run_evaluation_pipeline
-from models.evaluate import EvaluateRequest, EvaluateResponse, EvaluationResultResponse
-from models.upload import DocumentType
-from models.job import JobStatus
-from api.upload import validate_document_exists
-from databases.redis import create_job_record, get_job_status
+from fastapi import APIRouter, HTTPException, Path, Depends
+from sqlalchemy.orm import Session
+from src.task import run_evaluation_pipeline
+from src.models.evaluate import EvaluateRequest, EvaluateResponse, EvaluationResultResponse
+from src.models.upload import DocumentType
+from src.models.job import JobStatus
+from src.api.upload import validate_document_exists
+from src.databases.redis import create_job_record, get_job_status
 import logging
 import uuid
 from datetime import datetime
 
+from src.databases.postgres.database import get_db
+from src.repository.role_repository import find_role_by_name
 
 router = APIRouter()
 
@@ -39,7 +42,9 @@ async def evaluate_candidate(request: EvaluateRequest):
         await create_job_record(
             job_id=job_id,
             cv_id=request.cv_id,
+            cv_context=request.cv_context,
             report_id=request.report_id,
+            project_context=request.project_context,
             job_title=request.job_title,
             status=JobStatus.QUEUED,
             created_at=datetime.utcnow()
@@ -49,7 +54,9 @@ async def evaluate_candidate(request: EvaluateRequest):
         run_evaluation_pipeline.delay(
             job_id=job_id,
             cv_id=request.cv_id,
+            cv_context=request.cv_context,
             report_id=request.report_id,
+            project_context=request.project_context,
             job_title=request.job_title
         )
 
@@ -72,7 +79,7 @@ async def evaluate_candidate(request: EvaluateRequest):
             detail=f"Failed to retrieve result: {str(e)}"
         )
 
-@router.get("/result/{job_id}", response_model=EvaluationResultResponse)
+@router.get("/result/{job_id}", response_model=EvaluationResultResponse, response_model_exclude_none=True)
 async def get_evalutation_result(
     job_id: str = Path(..., description="Job ID from /evaluate endpoint")
 ):
@@ -93,3 +100,20 @@ async def get_evalutation_result(
     except Exception as e:
         logging.error(f"Failed to get result : str{e}")
         raise HTTPException(status_code=500, detail=f"Failed to retrieve result: {str(e)}")
+
+@router.get("/role/{name}")
+async def get_role(db: Session = Depends(get_db), name: str = Path(...)):
+    try:
+        role = find_role_by_name(db, name)
+        if not role:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Role not found: {name}"
+            )
+
+        return role
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Failed to get role: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve role: {str(e)}")
